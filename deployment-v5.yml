@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minikube-devops-usach
+  labels:
+    name: minikube-devops-usach
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: devops-usach
+  name: devops-usach
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-usach
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 30%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: devops-usach
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "8081"
+        - name: VERSION_APP
+          value: "0.1-SNAPSHOT"
+        livenessProbe:
+          httpGet:
+            path: /rest/mscovid/test?msg=testing
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 16
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /rest/mscovid/test?msg=testing
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        image: jibanez123456/docker-package-devops-usach:1.0-SNAPSHOT
+        name: docker-package-devops-usach
+        volumeMounts:
+        - mountPath: /devops-usach
+          name: devopsusachpath
+        - mountPath: /config
+          name: config
+          readOnly: true
+        - mountPath: /vol-secret
+          name: secret-devops-usach
+          readOnly: true
+      volumes:
+      - name: devopsusachpath
+        emptyDir: {}
+      - name: config
+        configMap:
+         name: devops-usach-setting
+         items:
+         - key: "enviroment.properties"
+           path: "enviroment.properties"
+      - name: secret-devops-usach
+        secret:
+          secretName: ms-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+ name: devops-usach
+spec:
+ ports:
+ - name: devops-usach
+   port: 8081
+   protocol: TCP
+   targetPort: 8081
+ selector:
+   app: devops-usach
+ type: ClusterIP
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: devops-usach
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta1
+    kind: Deployment
+    name: devops-usach
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 50
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devops-usach-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+    - host: devops-usach.com
+      http:
+        paths:
+          - path: /rest/covid
+            pathType: Prefix
+            backend:
+              service:
+                name: devops-usach
+                port:
+                  number: 8081    
+
